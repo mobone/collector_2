@@ -12,6 +12,7 @@ import pprint
 from dateutil import rrule
 
 
+
 # Generate ruleset for holiday observances on the NYSE
 
 def NYSE_holidays(a=date.today(), b=date.today()+timedelta(days=365)):
@@ -83,6 +84,7 @@ class processor(Process):
 
             price = None
             update_t = None
+            json_docs = []
             for i in range(1,len(tables)):
                 df = pd.read_html(str(tables[i]))[0]
                 try:
@@ -100,19 +102,25 @@ class processor(Process):
                 json_doc['_id'] = symbol+'_'+exp+'_'+update_date+'_'+str(update_int)
                 json_doc['update_time'] = update_t.split(b' ')[1].decode()
                 json_doc['last_stock_price'] = price
+                json_docs.append(json_doc)
                 #print(json_doc['_id'])
-                saved = False
-                while saved == False:
-                    try:
-                        db.save(json_doc)
-                        saved = True
-                    except couchdb.http.ResourceConflict:
-                        print('conflict', json_doc['_id'])
-                        saved = True
-                    except Exception as e:
-                        print(e)
-                        sleep(2)
-                        db = self.connect()
+
+            json_docs = eval('{"docs": '+str(json_docs)+'}')
+
+
+            saved = False
+            while saved == False:
+                try:
+                    db.save(json_docs, batch='ok')
+                    saved = True
+                except couchdb.http.ResourceConflict:
+                    print('conflict', json_doc['_id'])
+                    saved = True
+                except Exception as e:
+                    print(e)
+                    sleep(20)
+                    db = self.connect()
+
 
             if self.process_q.empty():
                 print("Process %i complete" % self.process_id, time()-start_t, datetime.now())
@@ -172,11 +180,11 @@ class collector(Thread):
 
 
     def run(self):
-        requests_cache.install_cache('demo_cache')
+        #requests_cache.install_cache('demo_cache')
         while not self.symbol_q.empty():
             page = self.symbol_q.get()
             self.get_finviz(page)
-        requests_cache.uninstall_cache()
+        #requests_cache.uninstall_cache()
 
         self.get_start_times()
         self.session = requests.session()
@@ -189,12 +197,12 @@ class collector(Thread):
 
             for symbol in self.symbols_list:
                 url = "https://www.marketwatch.com/investing/stock/%s/options?countrycode=US&showAll=True" % symbol
-                with requests_cache.disabled():
-                    try:
-                        res = self.session.get(url)
-                        self.process_q.put((self.start_index, symbol,res.content))
-                    except:
-                        pass
+                #with requests_cache.disabled():
+                try:
+                    res = self.session.get(url)
+                    self.process_q.put((self.start_index, symbol,res.content))
+                except:
+                    pass
 
 
     def get_start_times(self):
@@ -203,8 +211,9 @@ class collector(Thread):
         dt = datetime.strptime(dt+' 8:40:00', '%m-%d-%y %H:%M:%S')
         self.start_times = []
         while dt < end_dt:
-            dt = dt + timedelta(minutes=15)
             self.start_times.append(dt)
+            dt = dt + timedelta(minutes=15)
+
 
         # skip to current time window
         for self.start_index in range(len(self.start_times)):
@@ -241,10 +250,10 @@ if __name__ == '__main__':
 
     load_thread_q()
 
-    for thread_id in range(20):
+    for thread_id in range(25):
         c = collector(thread_id, finviz_q, process_q)
         c.start()
-        sleep(.3)
+        sleep(.5)
 
     for process_id in range(2):
         p = processor(process_id, process_q)
