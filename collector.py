@@ -10,7 +10,7 @@ from datetime import date, datetime, timedelta
 import couchdb
 import pprint
 from dateutil import rrule
-
+from requests_toolbelt.threaded import pool
 
 
 # Generate ruleset for holiday observances on the NYSE
@@ -66,17 +66,17 @@ class processor(Process):
 
     def run(self):
         db = self.connect()
+
         while self.process_q.empty():
             sleep(1)
 
-        print('Process %i started' % self.process_id)
         start_t = None
-
         while True:
             (update_int, symbol, html_text) = self.process_q.get()
 
             if start_t is None:
-                print("Process %i started" % self.process_id, datetime.now())
+                if self.process_id==0:
+                    print("Process %i started" % self.process_id, datetime.now())
                 start_t = time()
 
             tables = self.find_tables(html_text)
@@ -94,7 +94,6 @@ class processor(Process):
                     json_doc = df.to_json(orient="index")
                     json_doc = json_doc.replace('null', '"null"')
                     json_doc = eval(json_doc)
-
                 except Exception as e:
                     print(symbol, e)
                     continue
@@ -106,7 +105,6 @@ class processor(Process):
                 #print(json_doc['_id'])
 
             json_docs = eval('{"docs": '+str(json_docs)+'}')
-
 
             saved = False
             while saved == False:
@@ -121,12 +119,10 @@ class processor(Process):
                     sleep(20)
                     db = self.connect()
 
-
             if self.process_q.empty():
-                print("Process %i complete" % self.process_id, time()-start_t, datetime.now())
+                if self.process_id==0:
+                    print("Process %i complete" % self.process_id, datetime.now(), time()-start_t)
                 start_t = None
-                #if datetime.now()>self.market_close:
-                #    break
 
     def connect(self):
         try:
@@ -169,77 +165,52 @@ class processor(Process):
 
         return exp, price, update_t, df
 
+def get_symbols_list():
+    res = requests.get('https://finviz.com/screener.ashx?v=111&f=cap_smallover,sh_avgvol_o500,sh_opt_option')
+    pages = int(re.findall(b'Page [0-9]*\/[0-9]*', res.content)[0][7:])
 
-class collector(Thread):
-    def __init__(self, thread_id, symbol_q, process_q):
-        Thread.__init__(self)
-        self.thread_id = thread_id
-        self.symbol_q = symbol_q
-        self.process_q = process_q
-        self.symbols_list = []
+    urls = []
 
+    for i in range(1,20*pages,20):
+        urls.append('https://finviz.com/screener.ashx?v=111&f=cap_smallover,sh_avgvol_o500,sh_opt_option&r=%s' % i)
 
-    def run(self):
-        #requests_cache.install_cache('demo_cache')
-        while not self.symbol_q.empty():
-            page = self.symbol_q.get()
-            self.get_finviz(page)
-        #requests_cache.uninstall_cache()
-
-        self.get_start_times()
-        self.session = requests.session()
-
-        for self.start_index in range(self.start_index, len(self.start_times)):
-            if self.thread_id==0:
-                print("Thread %i sleeping" % self.thread_id, datetime.now(), self.start_times[self.start_index])
-            while datetime.now()<self.start_times[self.start_index]:
-                sleep(1)
-
-            for symbol in self.symbols_list:
-                url = "https://www.marketwatch.com/investing/stock/%s/options?countrycode=US&showAll=True" % symbol
-                #with requests_cache.disabled():
-                try:
-                    res = self.session.get(url)
-                    self.process_q.put((self.start_index, symbol,res.content))
-                except:
-                    pass
-
-
-    def get_start_times(self):
-        dt = datetime.now().strftime('%m-%d-%y')
-        end_dt = datetime.strptime(dt+' 15:00:00', '%m-%d-%y %H:%M:%S')
-        dt = datetime.strptime(dt+' 8:40:00', '%m-%d-%y %H:%M:%S')
-        self.start_times = []
-        while dt < end_dt:
-            self.start_times.append(dt)
-            dt = dt + timedelta(minutes=15)
-
-
-        # skip to current time window
-        for self.start_index in range(len(self.start_times)):
-            if datetime.now()<self.start_times[self.start_index]:
-                break
-
-    def get_finviz(self, page):
-        url = 'https://finviz.com/screener.ashx?v=111&f=sh_avgvol_o500,sh_opt_option&r=%s' % page
-        res = requests.get(url)
-
-        soup = BeautifulSoup(res.content,'lxml')
+    p = pool.Pool.from_urls(urls, num_processes=20)
+    p.join_all()
+    symbols_list = []
+    for response in p.responses():
+        soup = BeautifulSoup(response.content,'lxml')
         tables = soup.find_all('table')
         df = pd.read_html(str(tables[16]))[0]
-
         for symbol in df.ix[1:,1].values:
-            self.symbols_list.append(symbol)
+            symbols_list.append(symbol)
+    return symbols_list
 
-        if self.thread_id==0:
-            print('Length: ', len(self.symbols_list), self.thread_id)
+def get_options(symbols_list, process_q, start_index):
+    urls = []
+    for symbol in symbols_list:
+        urls.append('http://www.marketwatch.com/investing/stock/%s/options' % symbol)
 
+    p = pool.Pool.from_urls(urls, num_processes=20)
+    p.join_all()
 
-def load_thread_q():
-    res = requests.get('https://finviz.com/screener.ashx?v=111&f=sh_avgvol_o500,sh_opt_option')
-    pages = int(re.findall(b'Page [0-9]*\/[0-9]*', res.content)[0][7:])
-    for page in range(1,20*pages,20):
-        finviz_q.put(page)
+    for response in p.responses():
+        symbol = response.request_kwargs['url'].split('/')[5]
+        process_q.put((start_index, symbol, response.content))
+
+def get_start_times():
+    dt = datetime.now().strftime('%m-%d-%y')
+    end_dt = datetime.strptime(dt+' 15:00:00', '%m-%d-%y %H:%M:%S')
+    dt = datetime.strptime(dt+' 8:40:00', '%m-%d-%y %H:%M:%S')
+    start_times = []
+    while dt < end_dt:
+        start_times.append(dt)
+        dt = dt + timedelta(minutes=15)
+
+    # skip to current time window
+    for start_index in range(len(start_times)):
+        if datetime.now()<start_times[start_index]:
+            break
+    return start_times, start_index
 
 
 if __name__ == '__main__':
@@ -248,13 +219,21 @@ if __name__ == '__main__':
     process_q = Queue()
     finviz_q = Queue()
 
-    load_thread_q()
+    symbols_list = get_symbols_list()
+    print(len(symbols_list))
+    start_times, start_index = get_start_times()
+    print(start_times[start_index])
 
-    for thread_id in range(25):
-        c = collector(thread_id, finviz_q, process_q)
-        c.start()
-        sleep(.5)
+    processor_started = False
+    for start_index in range(start_index, len(start_times)):
+        print("Collector sleeping", datetime.now(), start_times[start_index])
+        while datetime.now()<start_times[start_index]:
+            sleep(1)
 
-    for process_id in range(2):
-        p = processor(process_id, process_q)
-        p.start()
+        get_options(symbols_list, process_q, start_index)
+
+        if processor_started == False:
+            for process_id in range(3):
+                p = processor(process_id, process_q)
+                p.start()
+            processor_started = True
