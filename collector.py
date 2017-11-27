@@ -11,47 +11,7 @@ import couchdb
 import pprint
 from dateutil import rrule
 from requests_toolbelt.threaded import pool
-
-
-# Generate ruleset for holiday observances on the NYSE
-
-def NYSE_holidays(a=date.today(), b=date.today()+timedelta(days=365)):
-    rs = rrule.rruleset()
-
-    # Include all potential holiday observances
-    rs.rrule(rrule.rrule(rrule.YEARLY, dtstart=a, until=b, bymonth=12, bymonthday=31, byweekday=rrule.FR)) # New Years Day
-    rs.rrule(rrule.rrule(rrule.YEARLY, dtstart=a, until=b, bymonth= 1, bymonthday= 1))                     # New Years Day
-    rs.rrule(rrule.rrule(rrule.YEARLY, dtstart=a, until=b, bymonth= 1, bymonthday= 2, byweekday=rrule.MO)) # New Years Day
-    rs.rrule(rrule.rrule(rrule.YEARLY, dtstart=a, until=b, bymonth= 1, byweekday= rrule.MO(3)))            # Martin Luther King Day
-    rs.rrule(rrule.rrule(rrule.YEARLY, dtstart=a, until=b, bymonth= 2, byweekday= rrule.MO(3)))            # Washington's Birthday
-    rs.rrule(rrule.rrule(rrule.YEARLY, dtstart=a, until=b, byeaster= -2))                                  # Good Friday
-    rs.rrule(rrule.rrule(rrule.YEARLY, dtstart=a, until=b, bymonth= 5, byweekday= rrule.MO(-1)))           # Memorial Day
-    rs.rrule(rrule.rrule(rrule.YEARLY, dtstart=a, until=b, bymonth= 7, bymonthday= 3, byweekday=rrule.FR)) # Independence Day
-    rs.rrule(rrule.rrule(rrule.YEARLY, dtstart=a, until=b, bymonth= 7, bymonthday= 4))                     # Independence Day
-    rs.rrule(rrule.rrule(rrule.YEARLY, dtstart=a, until=b, bymonth= 7, bymonthday= 5, byweekday=rrule.MO)) # Independence Day
-    rs.rrule(rrule.rrule(rrule.YEARLY, dtstart=a, until=b, bymonth= 9, byweekday= rrule.MO(1)))            # Labor Day
-    rs.rrule(rrule.rrule(rrule.YEARLY, dtstart=a, until=b, bymonth=11, byweekday= rrule.TH(4)))            # Thanksgiving Day
-    rs.rrule(rrule.rrule(rrule.YEARLY, dtstart=a, until=b, bymonth=12, bymonthday=24, byweekday=rrule.FR)) # Christmas
-    rs.rrule(rrule.rrule(rrule.YEARLY, dtstart=a, until=b, bymonth=12, bymonthday=25))                     # Christmas
-    rs.rrule(rrule.rrule(rrule.YEARLY, dtstart=a, until=b, bymonth=12, bymonthday=26, byweekday=rrule.MO)) # Christmas
-
-    # Exclude potential holidays that fall on weekends
-    rs.exrule(rrule.rrule(rrule.WEEKLY, dtstart=a, until=b, byweekday=(rrule.SA,rrule.SU)))
-
-    return rs
-
-# Generate ruleset for NYSE trading days
-
-def NYSE_tradingdays(a=date.today(), b=date.today()+timedelta(days=365)):
-    rs = rrule.rruleset()
-    rs.rrule(rrule.rrule(rrule.DAILY, dtstart=a, until=b))
-
-    # Exclude weekends and holidays
-    rs.exrule(rrule.rrule(rrule.WEEKLY, dtstart=a, byweekday=(rrule.SA,rrule.SU)))
-    rs.exrule(NYSE_holidays(a,b))
-
-    return rs
-
+from nyse_holidays import *
 
 #requests_cache.install_cache('demo_cache')
 
@@ -74,9 +34,8 @@ class processor(Process):
         while True:
             (update_int, symbol, html_text) = self.process_q.get()
 
-            if start_t is None:
-                if self.process_id==0:
-                    print("Process %i started" % self.process_id, datetime.now())
+            if start_t is None and self.process_id==0:
+                print("Process %i started" % self.process_id, datetime.now())
                 start_t = time()
 
             tables = self.find_tables(html_text)
@@ -84,7 +43,7 @@ class processor(Process):
 
             price = None
             update_t = None
-            json_docs = []
+            #json_docs = []
             for i in range(1,len(tables)):
                 df = pd.read_html(str(tables[i]))[0]
                 try:
@@ -101,32 +60,35 @@ class processor(Process):
                 json_doc['_id'] = symbol+'_'+exp+'_'+update_date+'_'+str(update_int)
                 json_doc['update_time'] = update_t.split(b' ')[1].decode()
                 json_doc['last_stock_price'] = price
-                json_docs.append(json_doc)
+                json_doc['symbol'] = symbol
+                json_doc['expiration'] = exp
+                json_doc['update_date'] = update_date
+                json_doc['update_interval'] = update_int
+                #json_docs.append(json_doc)
                 #print(json_doc['_id'])
 
-            json_docs = eval('{"docs": '+str(json_docs)+'}')
+                #json_docs = eval('{"docs": '+str(json_docs)+'}')
 
-            saved = False
-            while saved == False:
-                try:
-                    db.save(json_docs, batch='ok')
-                    saved = True
-                except couchdb.http.ResourceConflict:
-                    print('conflict', json_doc['_id'])
-                    saved = True
-                except Exception as e:
-                    print(e)
-                    sleep(20)
-                    db = self.connect()
+                saved = False
+                while saved == False:
+                    try:
+                        db.save(json_doc, batch='ok')
+                        saved = True
+                    except couchdb.http.ResourceConflict:
+                        print('conflict', json_doc['_id'])
+                        saved = True
+                    except Exception as e:
+                        print(e)
+                        sleep(20)
+                        db = self.connect()
 
-            if self.process_q.empty():
-                if self.process_id==0:
-                    print("Process %i complete" % self.process_id, datetime.now(), time()-start_t)
+            if self.process_q.qsize()==0 and self.process_id==0:
+                print("Process %i complete" % self.process_id, datetime.now(), time()-start_t)
                 start_t = None
 
     def connect(self):
         try:
-            couch = couchdb.Server("http://mobone:C00kie32!@192.168.1.2:5984/")
+            couch = couchdb.Server("http://mobone:C00kie32!@192.168.1.18:5984/")
             db = couch['marketwatch_2']
             return db
         except Exception as e:
@@ -138,7 +100,7 @@ class processor(Process):
         start = html_text.find('<p class="data bgLast">'.encode('utf-8'))
         end = html_text.find('</table>'.encode('utf-8'), start)+9
         html_text = html_text.replace(b'<tr class="chainrow heading colhead ', b'</table><table class="chainrow heading colhead')
-        html_text = html_text.replace(b'<tr class="optiontoggle">',b'</tabble><tr class="optiontoggle">')
+        html_text = html_text.replace(b'<tr class="optiontoggle">',b'</table><tr class="optiontoggle">')
 
         soup = BeautifulSoup(html_text[start:end],'lxml')
         tables = soup.find_all('table')
@@ -166,13 +128,13 @@ class processor(Process):
         return exp, price, update_t, df
 
 def get_symbols_list():
-    res = requests.get('https://finviz.com/screener.ashx?v=111&f=cap_smallover,sh_avgvol_o500,sh_opt_option')
+    res = requests.get('https://finviz.com/screener.ashx?v=111&f=cap_smallover,sh_avgvol_o300,sh_opt_option')
     pages = int(re.findall(b'Page [0-9]*\/[0-9]*', res.content)[0][7:])
 
     urls = []
 
     for i in range(1,20*pages,20):
-        urls.append('https://finviz.com/screener.ashx?v=111&f=cap_smallover,sh_avgvol_o500,sh_opt_option&r=%s' % i)
+        urls.append('https://finviz.com/screener.ashx?v=111&f=cap_smallover,sh_avgvol_o300,sh_opt_option&r=%s' % i)
 
     p = pool.Pool.from_urls(urls, num_processes=20)
     p.join_all()
@@ -188,7 +150,7 @@ def get_symbols_list():
 def get_options(symbols_list, process_q, start_index):
     urls = []
     for symbol in symbols_list:
-        urls.append('http://www.marketwatch.com/investing/stock/%s/options' % symbol)
+        urls.append('http://www.marketwatch.com/investing/stock/%s/options?showAll=True' % symbol)
 
     p = pool.Pool.from_urls(urls, num_processes=20)
     p.join_all()
@@ -214,8 +176,9 @@ def get_start_times():
 
 
 if __name__ == '__main__':
-    if NYSE_holidays()[0].strftime('%b %d %Y')==datetime.now().strftime('%b %d %Y'):
+    if datetime.now().strftime('%y%m%d') == NYSE_holidays()[0].strftime('%y%m%d'):
         exit()
+
     process_q = Queue()
     finviz_q = Queue()
 
