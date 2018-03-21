@@ -40,18 +40,22 @@ class option_getter(threading.Thread):
             del forward_data['Underlying']
             del forward_data['IsNonstandard']
             del forward_data['Symbol']
-            forward_data['Expiry'] = forward_data['Expiry'].astype(str)
+            self.update_date = datetime.now().strftime('%Y%m%d')
+            forward_data['Expiry'] = forward_data['Expiry'].astype(str).str.replace('-','')
             forward_data['iteration'] = self.iteration
+
             forward_data['Type'] = forward_data['Type'].str[0]
             forward_data['_id'] = forward_data['Root'].astype(str)+'_'+ \
                                   forward_data['Expiry'].astype(str)+'_'+ \
+                                  self.update_date+'_'+ \
                                   str(self.iteration)+'_'+ \
                                   forward_data['Type'].astype(str)+'_'+ \
                                   forward_data['Strike'].astype(str)
-            forward_data['_id'] = forward_data['_id'].replace('-','')
+            forward_data['_id'] = forward_data['_id'].str.replace('-','')
+
             data_json = forward_data.to_json(orient='records',date_format='iso')
         except Exception as e:
-
+            print("option err", e)
             pass
         return data_json
 
@@ -61,8 +65,8 @@ class data_storer(threading.Thread):
         self.out_q = out_q
 
     def run(self):
-        mongo_string = 'mongodb+srv://mobone32:C00kie32!@cluster0-o62xs.mongodb.net/testdb'
-        client = pymongo.MongoClient(mongo_string, ssl=True,ssl_cert_reqs=ssl.CERT_NONE)
+        mongo_string = 'mongodb://68.63.209.203:27017/'
+        client = pymongo.MongoClient(mongo_string)
         db = client.testdb
         collection = db.options
         while True:
@@ -70,7 +74,10 @@ class data_storer(threading.Thread):
                 data = self.out_q.get()
                 try:
                     collection.insert_many(eval(data))
+                    exit()
                 except Exception as e:
+                    print(e)
+                    input()
                     pass
             sleep(1)
 
@@ -84,7 +91,7 @@ def get_start_times():
         dt = dt + timedelta(minutes=15)
 
     # skip to current time window
-    for start_index in range(len(start_times)):
+    for start_index in range(1, len(start_times)):
         if datetime.now()<start_times[start_index]:
             break
     return start_times, start_index
@@ -106,7 +113,8 @@ def get_symbols():
         symbols_df = pd.read_html(response.text, header=0)[14]
         for symbol in list(symbols_df['Ticker']):
             symbols_list.append(symbol)
-
+        if len(symbols_list):
+            break
     return symbols_list
 
 def start_threads():
@@ -128,8 +136,9 @@ if __name__ == '__main__':
 
     for start_index in range(start_index, len(start_times)):
         print("Collector sleeping", datetime.now(), start_times[start_index])
-        while datetime.now()<start_times[start_index]:
-            sleep(1)
+        #while datetime.now()<start_times[start_index]:
+        #    sleep(1)
+
 
         start = time.time()
         for symbol in symbols_list:
@@ -140,3 +149,4 @@ if __name__ == '__main__':
         while symbols_q.qsize() or out_q.qsize():
             sleep(15)
             print(symbols_q.qsize(), out_q.qsize(), time.time()-start)
+        exit()
