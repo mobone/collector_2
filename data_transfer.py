@@ -1,27 +1,18 @@
-import couchdb
 import requests
 from datetime import datetime, timedelta
 import json
 import time
-from requests_toolbelt.threaded import pool
 import queue
 import pandas as pd
 import pymongo
-import threading
 import queue
 from time import sleep
 from multiprocessing import Process, Queue
 import argparse
 from redis_queue_class import RedisQueue
 
-
-
 #ip = '68.63.209.203'
 ip = '192.168.1.24'
-
-couch = couchdb.Server('http://mobone:C00kie32!@%s:5984/' % ip)
-db = couch['marketwatch_weekly']
-
 
 def get_times():
     dt = datetime.now().strftime('%m-%d-%y')
@@ -125,31 +116,11 @@ class option_class(Process):
 
         self.data_json = df.to_json(orient='records',date_format='iso')
 
-def pull_from_couchdb(skip):
-    #data = '{"selector": {"_id": {"$gte": "A"}}, "skip": %i, "limit": %i }' % (skip, increase_count)
-    headers = {'content-type': 'application/json'}
-    url = 'http://mobone:C00kie32!@192.168.1.24:5984/marketwatch_weekly/_all_docs?include_docs=true&limit=2000&skip=%s' % skip
-    #, data=json.dumps(eval(data)),
-    start_time = time.time()
-    response = requests.get(url = url)
-    #print(response.text)
-    #print(response)
-    print(datetime.now(), time.time()-start_time, skip, data_q.qsize())
-
-    return response
-
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
-
     parser.add_argument('proc', help='set numnber of processes', type=int)
-    #parser.add_argument('skip', help='set starting doc id', type=int)
     args = parser.parse_args()
 
-    #times = get_times()
-
-    #url_start = 'http://mobone:C00kie32!@%s:5984/marketwatch_weekly/' % ip
-    #url = url_start+'_find'
-    #jobs = queue.Queue()
     data_q = RedisQueue('options')
 
     # start threads
@@ -159,33 +130,4 @@ if __name__ == '__main__':
 
     while True:
         sleep(10)
-        print(datetime.now(), data_q.qsize())
-    """
-    init_count = args.skip
-    increase_count = 2000
-
-    data_list = []
-    response = pull_from_couchdb(init_count)
-    data_list.append(response)
-    init_count += increase_count
-
-
-    # start threads
-    for i in range(args.proc):
-        x = option_class(data_q)
-        x.start()
-
-    while True:
-        start = time.time()
-
-        response = pull_from_couchdb(init_count)
-        data_list.append(response)
-        init_count += increase_count
-
-        while data_q.qsize()>20000:
-            sleep(1)
-
-        rows = data_list.pop().json()['rows']
-        for row in rows:
-            data_q.put(row)
-    """
+        #print(datetime.now(), data_q.qsize())
