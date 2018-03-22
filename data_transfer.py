@@ -12,6 +12,9 @@ import queue
 from time import sleep
 from multiprocessing import Process, Queue
 import argparse
+from redis_queue_class import RedisQueue
+
+
 
 #ip = '68.63.209.203'
 ip = '192.168.1.24'
@@ -34,11 +37,13 @@ def get_times():
     return start_times
 
 class option_class(Process):
-    def __init__(self, q):
+    def __init__(self):
         Process.__init__(self)
-        self.q = q
+        print('starting')
+
 
     def run(self):
+        self.q = RedisQueue('options')
         self.times = get_times()
 
         mongo_string = 'mongodb://%s:27017/' % ip
@@ -46,11 +51,16 @@ class option_class(Process):
         db = client.finance
         self.collection = db.options
 
-        sleep(5)
+        #sleep(5)
         while True:
-            self.data = self.q.get()
+            self.data = eval(str(self.q.get())[2:-1])['doc']
 
-            self.create_last_stock_price()
+            try:
+                self.create_last_stock_price()
+            except Exception as e:
+                self.stock_last_price = None
+                print('err', e)
+
             self.create_update_time()
             self.create_id_parts()
             self.check_update_num()
@@ -102,7 +112,8 @@ class option_class(Process):
             self.data[key]['_id'] = self.id % (option_type.lower(), strike_price)
             self.data[key]['Strike'] = float(strike_price)
             self.data[key]['Type'] = option_type.lower()
-            self.data[key]['Underlying_Price'] = float(self.stock_last_price)
+            if self.stock_last_price:
+                self.data[key]['Underlying_Price'] = float(self.stock_last_price)
             self.data[key]['Quote_Time'] = self.update_date+'_'+self.update_time
             qt = datetime.strptime(self.data[key]['Quote_Time'], '%Y%m%d_%H:%M:%S')
             self.data[key]['Quote_Time'] = qt
@@ -115,11 +126,15 @@ class option_class(Process):
         self.data_json = df.to_json(orient='records',date_format='iso')
 
 def pull_from_couchdb(skip):
-    data = '{"selector": {"_id": {"$gte": "A"}}, "skip": %i, "limit": %i }' % (skip, increase_count)
+    #data = '{"selector": {"_id": {"$gte": "A"}}, "skip": %i, "limit": %i }' % (skip, increase_count)
     headers = {'content-type': 'application/json'}
+    url = 'http://mobone:C00kie32!@192.168.1.24:5984/marketwatch_weekly/_all_docs?include_docs=true&limit=2000&skip=%s' % skip
+    #, data=json.dumps(eval(data)),
     start_time = time.time()
-    response = requests.post(url = url, data=json.dumps(eval(data)), headers= headers)
-    print(datetime.now(), time.time()-start_time, skip)
+    response = requests.get(url = url)
+    #print(response.text)
+    #print(response)
+    print(datetime.now(), time.time()-start_time, skip, data_q.qsize())
 
     return response
 
@@ -127,25 +142,29 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
 
     parser.add_argument('proc', help='set numnber of processes', type=int)
-    parser.add_argument('skip', help='set starting doc id', type=int)
+    #parser.add_argument('skip', help='set starting doc id', type=int)
     args = parser.parse_args()
 
-    times = get_times()
+    #times = get_times()
 
-    url_start = 'http://mobone:C00kie32!@%s:5984/marketwatch_weekly/' % ip
-    url = url_start+'_find'
-    jobs = queue.Queue()
-    data_q = Queue()
+    #url_start = 'http://mobone:C00kie32!@%s:5984/marketwatch_weekly/' % ip
+    #url = url_start+'_find'
+    #jobs = queue.Queue()
+    data_q = RedisQueue('options')
 
+    # start threads
+    for i in range(args.proc):
+        x = option_class()
+        x.start()
+
+    while True:
+        sleep(10)
+        print(datetime.now(), data_q.qsize())
+    """
     init_count = args.skip
-    increase_count = 5000
+    increase_count = 2000
 
     data_list = []
-    response = pull_from_couchdb(init_count)
-    data_list.append(response)
-    init_count += increase_count
-
-
     response = pull_from_couchdb(init_count)
     data_list.append(response)
     init_count += increase_count
@@ -163,11 +182,10 @@ if __name__ == '__main__':
         data_list.append(response)
         init_count += increase_count
 
-
-
-        while data_q.qsize()>3000:
+        while data_q.qsize()>20000:
             sleep(1)
 
-        rows = data_list.pop().json()['docs']
+        rows = data_list.pop().json()['rows']
         for row in rows:
             data_q.put(row)
+    """
