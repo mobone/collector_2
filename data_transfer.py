@@ -13,7 +13,8 @@ from time import sleep
 from multiprocessing import Process, Queue
 import argparse
 
-ip = '68.63.209.203'
+#ip = '68.63.209.203'
+ip = '192.168.1.24'
 
 couch = couchdb.Server('http://mobone:C00kie32!@%s:5984/' % ip)
 db = couch['marketwatch_weekly']
@@ -38,6 +39,7 @@ class option_class(Process):
         self.q = q
 
     def run(self):
+        self.times = get_times()
 
         mongo_string = 'mongodb://%s:27017/' % ip
         client = pymongo.MongoClient(mongo_string)
@@ -71,17 +73,17 @@ class option_class(Process):
 
     def check_update_num(self):
         doc_time = datetime.strptime(self.update_time, '%H:%M:%S')
-        for i in range(1, len(times)-1):
-            range_time_0 = datetime.strptime(times[i], '%H:%M:%S')
-            range_time_1 = datetime.strptime(times[i+1], '%H:%M:%S')
+        for i in range(1, len(self.times)-1):
+            range_time_0 = datetime.strptime(self.times[i], '%H:%M:%S')
+            range_time_1 = datetime.strptime(self.times[i+1], '%H:%M:%S')
 
             if doc_time > range_time_0 and doc_time < range_time_1:
                 if self.update_num != str(i):
-                    print(self.id, self.update_num, i)
+                    #print(self.id, self.update_num, i)
                     self.update_num = str(i)
 
                     self.id = '_'.join([self.symbol, self.expiry, self.update_date, self.update_num, '%s', '%s'])
-                    print(self.id, self.update_num)
+                    #print(self.id, self.update_num)
 
     def create_last_stock_price(self):
         self.stock_last_price = self.data['Last_Stock_Price']
@@ -118,6 +120,7 @@ def pull_from_couchdb(skip):
     start_time = time.time()
     response = requests.post(url = url, data=json.dumps(eval(data)), headers= headers)
     print(datetime.now(), time.time()-start_time, skip)
+
     return response
 
 if __name__ == '__main__':
@@ -135,13 +138,18 @@ if __name__ == '__main__':
     data_q = Queue()
 
     init_count = args.skip
-    increase_count = 2000
+    increase_count = 5000
 
     data_list = []
     response = pull_from_couchdb(init_count)
     data_list.append(response)
-
     init_count += increase_count
+
+
+    response = pull_from_couchdb(init_count)
+    data_list.append(response)
+    init_count += increase_count
+
 
     # start threads
     for i in range(args.proc):
@@ -153,12 +161,13 @@ if __name__ == '__main__':
 
         response = pull_from_couchdb(init_count)
         data_list.append(response)
+        init_count += increase_count
+
+
+
+        while data_q.qsize()>3000:
+            sleep(1)
 
         rows = data_list.pop().json()['docs']
         for row in rows:
             data_q.put(row)
-
-        while not data_q.empty():
-            sleep(1)
-
-        init_count += increase_count
