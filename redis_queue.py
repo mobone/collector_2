@@ -2,7 +2,8 @@ from redis_queue_class import RedisQueue
 import time
 import requests
 from datetime import datetime
-q = RedisQueue('options')
+
+q = RedisQueue('options', host='192.168.1.5')
 
 def pull_from_couchdb(skip):
     #data = '{"selector": {"_id": {"$gte": "A"}}, "skip": %i, "limit": %i }' % (skip, increase_count)
@@ -26,5 +27,5 @@ while True:
         q.put(row)
 
     while q.qsize()>20000:
-        time.sleep(10)
+        time.sleep(15)
         print(datetime.now(), q.qsize())

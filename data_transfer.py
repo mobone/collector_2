@@ -34,7 +34,7 @@ class option_class(Process):
 
 
     def run(self):
-        self.q = RedisQueue('options')
+        self.q = RedisQueue('options', host='192.168.1.5')
         self.times = get_times()
 
         mongo_string = 'mongodb://%s:27017/' % ip
