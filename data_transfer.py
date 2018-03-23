@@ -44,6 +44,8 @@ class option_class(Process):
 
         #sleep(5)
         while True:
+            while self.q.qsize()<200000:
+                sleep(10)
             doc_id = eval(str(self.q.get())[2:-1])['id']
             #print(doc_id)
             response = requests.get('http://mobone:C00kie32!@192.168.1.24:5984/marketwatch_weekly/%s' % doc_id)
