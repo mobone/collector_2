@@ -13,7 +13,7 @@ from requests_toolbelt.threaded import pool
 import re
 from nyse_holidays import *
 
-couch = couchdb.Server("http://mobone:C00kie32!@192.168.1.18:5984/")
+couch = couchdb.Server("http://mobone:C00kie32!@192.168.1.24:5984/")
 db_data = couch['finviz_data']
 
 def get_data(html_text, ticker):

@@ -1,1 +1,1 @@
-python collector.py
+python yahoo_collector.py
