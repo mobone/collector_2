@@ -44,7 +44,13 @@ class option_class(Process):
 
         #sleep(5)
         while True:
-            self.data = eval(str(self.q.get())[2:-1])['doc']
+            doc_id = eval(str(self.q.get())[2:-1])['id']
+            #print(doc_id)
+            response = requests.get('http://mobone:C00kie32!@192.168.1.24:5984/marketwatch_weekly/%s' % doc_id)
+            #print(response.json())
+            #print(type(response.json()))
+
+            self.data = response.json()
 
             try:
                 self.create_last_stock_price()
