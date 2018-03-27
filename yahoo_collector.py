@@ -88,6 +88,18 @@ class data_storer(Process):
             sleep(1)
         print('process exiting')
 
+class thread_starter(Process):
+    def __init__(self, q, out_q, iteration):
+        Process.__init__(self)
+
+    def run(self):
+        for i in range(25):
+            x = option_getter(i, q, out_q, iteration)
+            x.start()
+        while q.qsize():
+            sleep(10)
+
+
 def get_start_times():
     dt = datetime.now().strftime('%m-%d-%y')
     end_dt = datetime.strptime(dt+' 15:00:00', '%m-%d-%y %H:%M:%S')
@@ -125,10 +137,11 @@ def get_symbols():
     return symbols_list
 
 def start_threads():
-    for i in range(25):
-        x = option_getter(i, symbols_q, out_q, start_index+1)
-        x.start()
 
+    starter = thread_starter(symbols_q, out_q, start_index+1)
+    starter.start()
+    starter = thread_starter(symbols_q, out_q, start_index+1)
+    starter.start()
     storer = data_storer(out_q)
     storer.start()
 
