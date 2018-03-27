@@ -88,7 +88,7 @@ class processor(Process):
 
     def connect(self):
         try:
-            couch = couchdb.Server("http://mobone:C00kie32!@192.168.1.18:5984/")
+            couch = couchdb.Server("http://mobone:C00kie32!@192.168.1.24:5984/")
             db = couch['marketwatch_2']
             return db
         except Exception as e:

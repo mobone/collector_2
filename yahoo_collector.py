@@ -10,9 +10,9 @@ import pymongo
 import ssl
 from requests_toolbelt.threaded import pool
 from datetime import datetime, timedelta
+from multiprocessing import Process, Queue
 
-
-finviz_url = 'https://finviz.com/screener.ashx?v=111&f=cap_smallover,sh_avgvol_o100,sh_opt_option&r=%s'
+finviz_url = 'https://finviz.com/screener.ashx?v=111&f=cap_smallover,sh_avgvol_o300,sh_opt_option&r=%s'
 
 class option_getter(threading.Thread):
     def __init__(self, threadID, q, out_q, iteration):
@@ -22,7 +22,9 @@ class option_getter(threading.Thread):
         self.out_q = out_q
         self.iteration = iteration
 
+
     def run(self):
+        self.update_date = datetime.now().strftime('%Y%m%d')
         while self.q.qsize():
             symbol = self.q.get()
             options = self.get_options(symbol)
@@ -31,7 +33,7 @@ class option_getter(threading.Thread):
 
 
     def get_options(self, symbol):
-        data_json = None
+        forward_data = None
         o = Options(symbol)
         try:
             forward_data = o.get_forward_data(4, call=True, put=True).reset_index()
@@ -40,7 +42,7 @@ class option_getter(threading.Thread):
             del forward_data['Underlying']
             del forward_data['IsNonstandard']
             del forward_data['Symbol']
-            self.update_date = datetime.now().strftime('%Y%m%d')
+
             forward_data['Expiry'] = forward_data['Expiry'].astype(str).str.replace('-','')
             forward_data['iteration'] = self.iteration
 
@@ -52,34 +54,36 @@ class option_getter(threading.Thread):
                                   forward_data['Type'].astype(str)+'_'+ \
                                   forward_data['Strike'].astype(str)
             forward_data['_id'] = forward_data['_id'].str.replace('-','')
+            
 
-            data_json = forward_data.to_json(orient='records',date_format='iso')
         except Exception as e:
-            print("option err", e)
+            #print("option err", e)
             pass
-        return data_json
+        return forward_data
 
-class data_storer(threading.Thread):
+class data_storer(Process):
     def __init__(self, out_q):
-        threading.Thread.__init__(self)
+        Process.__init__(self)
         self.out_q = out_q
 
     def run(self):
-        mongo_string = 'mongodb://68.63.209.203:27017/'
+        #mongo_string = 'mongodb://68.63.209.203:27017/'
+        mongo_string = 'mongodb://192.168.1.24:27017/'
         client = pymongo.MongoClient(mongo_string)
-        db = client.testdb
+        db = client.finance
         collection = db.options
+        print('process started')
         while True:
             while self.out_q.qsize():
                 data = self.out_q.get()
+                data = data.to_json(orient='records',date_format='iso')
                 try:
                     collection.insert_many(eval(data))
-                    exit()
+
                 except Exception as e:
-                    print(e)
-                    input()
                     pass
             sleep(1)
+        print('process exiting')
 
 def get_start_times():
     dt = datetime.now().strftime('%m-%d-%y')
@@ -110,20 +114,20 @@ def get_symbols():
     start = time.time()
 
     for response in p.responses():
-        symbols_df = pd.read_html(response.text, header=0)[14]
-        for symbol in list(symbols_df['Ticker']):
-            symbols_list.append(symbol)
-        if len(symbols_list):
-            break
+        symbols = re.findall(r'primary">[A-Z]*', response.text)
+        for symbol in symbols:
+            symbols_list.append(symbol.split('>')[1])
+        #if len(symbols_list)>1000:
+        #    break
     return symbols_list
 
 def start_threads():
-    for i in range(30):
+    for i in range(1):
         x = option_getter(i, symbols_q, out_q, start_index)
         x.start()
 
-    x = data_storer(out_q)
-    x.start()
+    storer = data_storer(out_q)
+    storer.start()
 
 
 if __name__ == '__main__':
@@ -132,7 +136,7 @@ if __name__ == '__main__':
     symbols_list = get_symbols()
 
     symbols_q = queue.Queue()
-    out_q = queue.Queue()
+    out_q = Queue()
 
     for start_index in range(start_index, len(start_times)):
         print("Collector sleeping", datetime.now(), start_times[start_index])
@@ -145,8 +149,7 @@ if __name__ == '__main__':
             symbols_q.put(symbol)
 
         start_threads()
-
+        #print('>>',symbols_q.qsize(), out_q.qsize(), time.time()-start)
         while symbols_q.qsize() or out_q.qsize():
             sleep(15)
             print(symbols_q.qsize(), out_q.qsize(), time.time()-start)
-        exit()
