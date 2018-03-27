@@ -11,6 +11,7 @@ import ssl
 from requests_toolbelt.threaded import pool
 from datetime import datetime, timedelta
 from multiprocessing import Process, Queue
+from nyse_holidays import *
 
 finviz_url = 'https://finviz.com/screener.ashx?v=111&f=cap_smallover,sh_avgvol_o300,sh_opt_option&r=%s'
 
@@ -47,6 +48,8 @@ class option_getter(threading.Thread):
             forward_data['iteration'] = self.iteration
 
             forward_data['Type'] = forward_data['Type'].str[0]
+            forward_data['Update_Date'] = self.update_date
+            forward_data['Update_Time'] = datetime.now().strftime('%H:%M:%S')
             forward_data['_id'] = forward_data['Root'].astype(str)+'_'+ \
                                   forward_data['Expiry'].astype(str)+'_'+ \
                                   self.update_date+'_'+ \
@@ -54,7 +57,7 @@ class option_getter(threading.Thread):
                                   forward_data['Type'].astype(str)+'_'+ \
                                   forward_data['Strike'].astype(str)
             forward_data['_id'] = forward_data['_id'].str.replace('-','')
-            
+
 
         except Exception as e:
             #print("option err", e)
@@ -72,7 +75,7 @@ class data_storer(Process):
         client = pymongo.MongoClient(mongo_string)
         db = client.finance
         collection = db.options
-        print('process started')
+        #print('process started')
         while True:
             while self.out_q.qsize():
                 data = self.out_q.get()
@@ -95,7 +98,7 @@ def get_start_times():
         dt = dt + timedelta(minutes=15)
 
     # skip to current time window
-    for start_index in range(1, len(start_times)):
+    for start_index in range(len(start_times)):
         if datetime.now()<start_times[start_index]:
             break
     return start_times, start_index
@@ -122,8 +125,8 @@ def get_symbols():
     return symbols_list
 
 def start_threads():
-    for i in range(1):
-        x = option_getter(i, symbols_q, out_q, start_index)
+    for i in range(25):
+        x = option_getter(i, symbols_q, out_q, start_index+1)
         x.start()
 
     storer = data_storer(out_q)
@@ -131,6 +134,8 @@ def start_threads():
 
 
 if __name__ == '__main__':
+    if datetime.now().strftime('%y%m%d') == NYSE_holidays()[0].strftime('%y%m%d'):
+        exit()
     start_times, start_index = get_start_times()
 
     symbols_list = get_symbols()
@@ -140,8 +145,8 @@ if __name__ == '__main__':
 
     for start_index in range(start_index, len(start_times)):
         print("Collector sleeping", datetime.now(), start_times[start_index])
-        #while datetime.now()<start_times[start_index]:
-        #    sleep(1)
+        while datetime.now()<start_times[start_index]:
+            sleep(1)
 
 
         start = time.time()
@@ -150,6 +155,6 @@ if __name__ == '__main__':
 
         start_threads()
         #print('>>',symbols_q.qsize(), out_q.qsize(), time.time()-start)
-        while symbols_q.qsize() or out_q.qsize():
+        while symbols_q.qsize():
             sleep(15)
             print(symbols_q.qsize(), out_q.qsize(), time.time()-start)
