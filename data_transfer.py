@@ -10,7 +10,7 @@ from time import sleep
 from multiprocessing import Process, Queue
 import argparse
 from redis_queue_class import RedisQueue
-
+import json
 #ip = '68.63.209.203'
 ip = '192.168.1.24'
 
@@ -34,20 +34,20 @@ class option_class(Process):
 
 
     def run(self):
-        self.q = RedisQueue('options', host='192.168.1.5')
+        self.q = RedisQueue('options', host='192.168.1.24')
         self.times = get_times()
 
         mongo_string = 'mongodb://%s:27017/' % ip
         client = pymongo.MongoClient(mongo_string)
         db = client.finance
-        self.collection = db.options_test
+        self.collection = db.options
 
         #sleep(5)
         while True:
-            while self.q.qsize()<200000:
-                sleep(10)
+
             doc_id = eval(str(self.q.get())[2:-1])['id']
             #print(doc_id)
+            #sleep(1)
             response = requests.get('http://mobone:C00kie32!@192.168.1.24:5984/marketwatch_weekly/%s' % doc_id)
             #print(response.json())
             #print(type(response.json()))
@@ -68,8 +68,10 @@ class option_class(Process):
 
     def store_option(self):
         try:
-            self.collection.insert_many(eval(self.data_json))
+            #print(self.data_json)
+            self.collection.insert_many(json.loads(self.data_json))
         except Exception as e:
+            print(datetime.now(),e)
             pass
 
     def create_id_parts(self):
@@ -119,7 +121,17 @@ class option_class(Process):
             self.data[key]['Root'] = self.symbol
             self.data[key]['iteration'] = int(self.update_num)
             self.data[key]['Expiry'] = self.expiry
-
+            self.data[key]['Update_Date'] = self.update_date
+            self.data[key]['Update_Time'] = datetime.now().strftime('%H:%M:%S')
+            option_symbol = self.symbol+str(self.expiry)[2:]+option_type.upper()
+            str_strike_price = str(strike_price)
+            num_digits = len(strike_price.split('.')[1])
+            while num_digits!=3:
+                str_strike_price += '0'
+                num_digits += 1
+            str_strike_price = str_strike_price.replace('.','').zfill(8)
+            option_symbol += str_strike_price
+            self.data[key]['Symbol'] = option_symbol
             df = df.append(pd.DataFrame(self.data[key], index=[0]))
 
         self.data_json = df.to_json(orient='records',date_format='iso')

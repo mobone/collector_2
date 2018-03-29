@@ -13,6 +13,7 @@ from datetime import datetime, timedelta
 from multiprocessing import Process, Queue
 from nyse_holidays import *
 import json
+from pymongo.errors import BulkWriteError
 finviz_url = 'https://finviz.com/screener.ashx?v=111&f=cap_smallover,sh_avgvol_o300,sh_opt_option&r=%s'
 
 class option_getter(threading.Thread):
@@ -59,7 +60,7 @@ class option_getter(threading.Thread):
                                   forward_data['Strike'].astype(str)
             forward_data['_id'] = forward_data['_id'].str.replace('-','')
 
-            
+
         except:
             pass
         return forward_data
@@ -87,11 +88,16 @@ class data_storer(Process):
 
 
             try:
+
                 collection.insert_many(json.loads(data))
 
-            except Exception as e:
-                print(e)
-                pass
+            except BulkWriteError as bwe:
+                print(bwe.details)
+                #you can also take this component and do more analysis
+                werrors = bwe.details['writeErrors']
+                print('\n\n')
+                print(werrors)
+
 
         print('process exiting')
 
@@ -136,7 +142,7 @@ def get_symbols():
 
     p = pool.Pool.from_urls(urls)
     p.join_all()
-    symbols_list = []
+    symbols_list = ['SPY','DIA']
     start = time.time()
 
     for response in p.responses():
