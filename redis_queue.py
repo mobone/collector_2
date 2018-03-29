@@ -14,7 +14,7 @@ def pull_from_couchdb(skip):
     response = requests.get(url = url)
     #print(response.text)
     #print(response)
-    print('getting', datetime.now(), q.qsize(), skip+4000, '',time.time()-start_time)
+    print('getting', datetime.now(), q.qsize(), skip+skip_count, '',time.time()-start_time)
 
     return response
 
@@ -22,13 +22,15 @@ counts = []
 
 skip = 0
 total = 46208448
+skip_count = 1
 while True:
     options = pull_from_couchdb(skip)
-    skip += 4000
+    skip += skip_count
 
     for row in options.json()['rows']:
         q.put(row)
     last_size = q.qsize()
+    break #TODO
     while q.qsize()>200000:
         time.sleep(30)
         counts.append(q.qsize()-last_size)

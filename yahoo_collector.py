@@ -12,7 +12,7 @@ from requests_toolbelt.threaded import pool
 from datetime import datetime, timedelta
 from multiprocessing import Process, Queue
 from nyse_holidays import *
-
+import json
 finviz_url = 'https://finviz.com/screener.ashx?v=111&f=cap_smallover,sh_avgvol_o300,sh_opt_option&r=%s'
 
 class option_getter(threading.Thread):
@@ -22,6 +22,7 @@ class option_getter(threading.Thread):
         self.q = q
         self.out_q = out_q
         self.iteration = iteration
+        self.s = r.Session()
 
 
     def run(self):
@@ -35,14 +36,14 @@ class option_getter(threading.Thread):
 
     def get_options(self, symbol):
         forward_data = None
-        o = Options(symbol)
+
+
         try:
-            forward_data = o.get_forward_data(4, call=True, put=True).reset_index()
+            o = Options(symbol, session=self.s)
+            forward_data = o.get_forward_data(5, call=True, put=True).reset_index()
 
             del forward_data['JSON']
             del forward_data['Underlying']
-            del forward_data['IsNonstandard']
-            del forward_data['Symbol']
 
             forward_data['Expiry'] = forward_data['Expiry'].astype(str).str.replace('-','')
             forward_data['iteration'] = self.iteration
@@ -58,15 +59,15 @@ class option_getter(threading.Thread):
                                   forward_data['Strike'].astype(str)
             forward_data['_id'] = forward_data['_id'].str.replace('-','')
 
-
-        except Exception as e:
-            #print("option err", e)
+            
+        except:
             pass
         return forward_data
 
 class data_storer(Process):
-    def __init__(self, out_q):
+    def __init__(self, q, out_q):
         Process.__init__(self)
+        self.q = q
         self.out_q = out_q
 
     def run(self):
@@ -76,28 +77,38 @@ class data_storer(Process):
         db = client.finance
         collection = db.options
         #print('process started')
-        while True:
-            while self.out_q.qsize():
-                data = self.out_q.get()
-                data = data.to_json(orient='records',date_format='iso')
-                try:
-                    collection.insert_many(eval(data))
+        #while True:
+        while self.out_q.qsize()==0:
+            sleep(10)
+        while self.out_q.qsize() or self.q.qsize():
+            data = self.out_q.get()
+            data = data.to_json(orient='records',date_format='iso')
 
-                except Exception as e:
-                    pass
-            sleep(1)
+
+
+            try:
+                collection.insert_many(json.loads(data))
+
+            except Exception as e:
+                print(e)
+                pass
+
         print('process exiting')
 
 class thread_starter(Process):
     def __init__(self, q, out_q, iteration):
         Process.__init__(self)
+        self.q = q
+        self.out_q = out_q
+        self.iteration = iteration
 
     def run(self):
-        for i in range(25):
-            x = option_getter(i, q, out_q, iteration)
+        for i in range(20):
+            x = option_getter(i, self.q, self.out_q, self.iteration)
             x.start()
-        while q.qsize():
+        while self.q.qsize():
             sleep(10)
+
 
 
 def get_start_times():
@@ -138,12 +149,17 @@ def get_symbols():
 
 def start_threads():
 
+
     starter = thread_starter(symbols_q, out_q, start_index+1)
     starter.start()
     starter = thread_starter(symbols_q, out_q, start_index+1)
     starter.start()
-    storer = data_storer(out_q)
-    storer.start()
+    starter = thread_starter(symbols_q, out_q, start_index+1)
+    starter.start()
+    if out_q.qsize()==0:
+        storer = data_storer(symbols_q, out_q)
+        storer.start()
+
 
 
 if __name__ == '__main__':
@@ -153,11 +169,11 @@ if __name__ == '__main__':
 
     symbols_list = get_symbols()
 
-    symbols_q = queue.Queue()
+    symbols_q = Queue()
     out_q = Queue()
 
     for start_index in range(start_index, len(start_times)):
-        print("Collector sleeping", datetime.now(), start_times[start_index])
+        print("Collector sleeping", datetime.now(), start_times[start_index], start_index+1)
         while datetime.now()<start_times[start_index]:
             sleep(1)
 

@@ -40,7 +40,7 @@ class option_class(Process):
         mongo_string = 'mongodb://%s:27017/' % ip
         client = pymongo.MongoClient(mongo_string)
         db = client.finance
-        self.collection = db.options
+        self.collection = db.options_test
 
         #sleep(5)
         while True:
