@@ -59,12 +59,14 @@ class option_class(Process):
             except Exception as e:
                 self.stock_last_price = None
                 print('err', e)
-
-            self.create_update_time()
-            self.create_id_parts()
-            self.check_update_num()
-            self.create_option()
-            self.store_option()
+            try:
+                self.create_update_time()
+                self.create_id_parts()
+                self.check_update_num()
+                self.create_option()
+                self.store_option()
+            except Exception as e:
+                print('error', e)
 
     def store_option(self):
         try:
@@ -101,8 +103,11 @@ class option_class(Process):
         del self.data['Last_Stock_Price']
 
     def create_update_time(self):
-        self.update_time = self.data['Update_Time']
-        del self.data['Update_Time']
+        try:
+            self.update_time = self.data['Update_Time']
+            del self.data['Update_Time']
+        except:
+            pass
 
     def create_option(self):
         df = pd.DataFrame([], columns=['Strike','Expiry', 'Type', 'Last', 'Bid', 'Ask', 'Vol', 'Open_Int', 'Root', 'Underlying_Price', 'Quote_Time', 'iteration'])
@@ -110,6 +115,7 @@ class option_class(Process):
         for key in self.data.keys():
             strike_price = key[:-1]
             option_type = key[-1:]
+
             self.data[key]['_id'] = self.id % (option_type.lower(), strike_price)
             self.data[key]['Strike'] = float(strike_price)
             self.data[key]['Type'] = option_type.lower()
@@ -125,7 +131,11 @@ class option_class(Process):
             self.data[key]['Update_Time'] = datetime.now().strftime('%H:%M:%S')
             option_symbol = self.symbol+str(self.expiry)[2:]+option_type.upper()
             str_strike_price = str(strike_price)
-            num_digits = len(strike_price.split('.')[1])
+            if '.' in str_strike_price:
+                num_digits = len(str_strike_price.split('.')[1])
+            else:
+                num_digits = 0
+
             while num_digits!=3:
                 str_strike_price += '0'
                 num_digits += 1
