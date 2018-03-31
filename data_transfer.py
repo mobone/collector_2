@@ -11,6 +11,7 @@ from multiprocessing import Process, Queue
 import argparse
 from redis_queue_class import RedisQueue
 import json
+from pymongo.errors import BulkWriteError
 #ip = '68.63.209.203'
 ip = '192.168.1.24'
 
@@ -43,12 +44,21 @@ class option_class(Process):
         self.collection = db.options
 
         #sleep(5)
+        err = False
         while True:
-
-            doc_id = eval(str(self.q.get())[2:-1])['id']
+            if err==False:
+                doc_id = eval(str(self.q.get())[2:-1])['id']
+                self.doc_id = doc_id
             #print(doc_id)
             #sleep(1)
-            response = requests.get('http://mobone:C00kie32!@192.168.1.24:5984/marketwatch_weekly/%s' % doc_id)
+            try:
+                response = requests.get('http://mobone:C00kie32!@192.168.1.24:5984/marketwatch_weekly/%s' % doc_id)
+                err = False
+            except Exception as e:
+                print(e)
+                sleep(60)
+                err = True
+                continue
             #print(response.json())
             #print(type(response.json()))
 
@@ -66,15 +76,24 @@ class option_class(Process):
                 self.create_option()
                 self.store_option()
             except Exception as e:
-                print('error', e)
+                print('error', e, self.doc_id)
 
     def store_option(self):
         try:
             #print(self.data_json)
-            self.collection.insert_many(json.loads(self.data_json))
-        except Exception as e:
-            print(datetime.now(),e)
+            self.collection.insert_many(json.loads(self.data_json), ordered=False)
+        except BulkWriteError as bwe:
             pass
+            """
+            print('---------------------------')
+            print(datetime.now())
+            #print(bwe.details,'\n\n')
+            #you can also take this component and do more analysis
+            werrors = bwe.details['writeErrors']
+            print(json.dumps(werrors, indent=4, sort_keys=True))
+            print('---------------------------')
+            """
+
 
     def create_id_parts(self):
         self.symbol, self.expiry, self.update_date, self.update_num = self.data['_id'].replace('-','').split('_')
@@ -111,8 +130,11 @@ class option_class(Process):
 
     def create_option(self):
         df = pd.DataFrame([], columns=['Strike','Expiry', 'Type', 'Last', 'Bid', 'Ask', 'Vol', 'Open_Int', 'Root', 'Underlying_Price', 'Quote_Time', 'iteration'])
-
+        #print(self.data.keys())
+        #print(self.doc_id)
+        #exit()
         for key in self.data.keys():
+
             strike_price = key[:-1]
             option_type = key[-1:]
 
@@ -129,6 +151,7 @@ class option_class(Process):
             self.data[key]['Expiry'] = self.expiry
             self.data[key]['Update_Date'] = self.update_date
             self.data[key]['Update_Time'] = datetime.now().strftime('%H:%M:%S')
+            self.data[key]['Original_doc_id'] = self.doc_id
             option_symbol = self.symbol+str(self.expiry)[2:]+option_type.upper()
             str_strike_price = str(strike_price)
             if '.' in str_strike_price:
