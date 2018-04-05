@@ -14,6 +14,8 @@ from multiprocessing import Process, Queue
 from nyse_holidays import *
 import json
 from pymongo.errors import BulkWriteError
+import warnings
+warnings.simplefilter(action='ignore', category=FutureWarning)
 finviz_url = 'https://finviz.com/screener.ashx?v=111&f=cap_smallover,sh_avgvol_o300,sh_opt_option&r=%s'
 
 class option_getter(threading.Thread):
@@ -81,23 +83,22 @@ class data_storer(Process):
         #while True:
         while self.out_q.qsize()==0:
             sleep(10)
-        while self.out_q.qsize() or self.q.qsize():
+        while True:
+            if self.out_q.qsize()==0:
+                sleep(10)
             data = self.out_q.get()
             data = data.to_json(orient='records',date_format='iso')
 
-
-
             try:
 
-                collection.insert_many(json.loads(data))
+                collection.insert_many(json.loads(data), ordered=False)
 
             except BulkWriteError as bwe:
-                print(bwe.details)
+                #print(bwe.details)
                 #you can also take this component and do more analysis
                 werrors = bwe.details['writeErrors']
-                print('\n\n')
-                print(werrors)
-
+                #print('\n\n')
+                #print(werrors)
 
         print('process exiting')
 
@@ -154,17 +155,13 @@ def get_symbols():
     return symbols_list
 
 def start_threads():
+    
+    for i in range(3):
+        starter = thread_starter(symbols_q, out_q, start_index+1)
+        starter.start()
 
 
-    starter = thread_starter(symbols_q, out_q, start_index+1)
-    starter.start()
-    starter = thread_starter(symbols_q, out_q, start_index+1)
-    starter.start()
-    starter = thread_starter(symbols_q, out_q, start_index+1)
-    starter.start()
-    if out_q.qsize()==0:
-        storer = data_storer(symbols_q, out_q)
-        storer.start()
+
 
 
 
@@ -177,6 +174,9 @@ if __name__ == '__main__':
 
     symbols_q = Queue()
     out_q = Queue()
+
+    storer = data_storer(symbols_q, out_q)
+    storer.start()
 
     for start_index in range(start_index, len(start_times)):
         print("Collector sleeping", datetime.now(), start_times[start_index], start_index+1)
