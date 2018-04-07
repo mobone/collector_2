@@ -80,19 +80,13 @@ class option_class(Process):
 
     def store_option(self):
         try:
-            #print(self.data_json)
-            self.collection.insert_many(json.loads(self.data_json), ordered=False)
+
+            result = self.collection.insert_many(json.loads(self.data_json), ordered=False)
+
         except BulkWriteError as bwe:
+
             pass
-            """
-            print('---------------------------')
-            print(datetime.now())
-            #print(bwe.details,'\n\n')
-            #you can also take this component and do more analysis
-            werrors = bwe.details['writeErrors']
-            print(json.dumps(werrors, indent=4, sort_keys=True))
-            print('---------------------------')
-            """
+
 
 
     def create_id_parts(self):
@@ -151,7 +145,7 @@ class option_class(Process):
             self.data[key]['Expiry'] = self.expiry
             self.data[key]['Update_Date'] = self.update_date
             self.data[key]['Update_Time'] = datetime.now().strftime('%H:%M:%S')
-            self.data[key]['Original_doc_id'] = self.doc_id
+            #self.data[key]['Original_doc_id'] = self.doc_id
             option_symbol = self.symbol+str(self.expiry)[2:]+option_type.upper()
             str_strike_price = str(strike_price)
             if '.' in str_strike_price:
