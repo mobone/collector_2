@@ -22,9 +22,9 @@ finviz_url = 'https://finviz.com/screener.ashx?v=111&f=cap_smallover,sh_avgvol_o
 
 config = configparser.ConfigParser()
 config.read('config.cfg')
-username = urllib.parse.quote_plus(config['creds']['User'])
-password = urllib.parse.quote_plus(config['creds']['Pass'])
-
+username = config['creds']['User']
+password = config['creds']['Pass']
+ip = config['conn']['ip']
 class option_getter(threading.Thread):
     def __init__(self, threadID, q, out_q, iteration):
         threading.Thread.__init__(self)
@@ -82,8 +82,12 @@ class data_storer(Process):
 
     def run(self):
         #mongo_string = 'mongodb://68.63.209.203:27017/'
-        mongo_string = 'mongodb://%s:%s@%s:27017/' % (username, password, ip)
-        client = pymongo.MongoClient(mongo_string)
+        #mongo_string = 'mongodb://%s:%s@%s:27017/' % (username, password, ip)
+        #client = pymongo.MongoClient(mongo_string)
+        client = pymongo.MongoClient(ip+':27017',
+                                     username = username,
+                                     password = password,
+                                     authSource='finance')
         db = client.finance
         collection = db.options
         #print('process started')

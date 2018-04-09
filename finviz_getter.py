@@ -18,11 +18,15 @@ import urllib
 
 config = configparser.ConfigParser()
 config.read('config.cfg')
-username = urllib.parse.quote_plus(config['creds']['User'])
-password = urllib.parse.quote_plus(config['creds']['Pass'])
+username = config['creds']['User']
+password = config['creds']['Pass']
+ip = config['conn']['ip']
 
 mongo_string = 'mongodb://%s:%s@%s:27017/' % (username, password, ip)
-client = pymongo.MongoClient(mongo_string)
+client = pymongo.MongoClient(ip+':27017',
+                             username = username,
+                             password = password,
+                             authSource='finance')
 db = client.finance
 collection = db.finviz
 def get_data(html_text, ticker):

@@ -16,9 +16,8 @@ import configparser
 import urllib
 config = configparser.ConfigParser()
 config.read('config.cfg')
-username = urllib.parse.quote_plus(config['creds']['User'])
-password = urllib.parse.quote_plus(config['creds']['Pass'])
-
+username = config['creds']['User']
+password = config['creds']['Pass']
 ip = config['conn']['ip']
 
 def get_times():
@@ -44,8 +43,11 @@ class option_class(Process):
         self.q = RedisQueue('options', host=ip)
         self.times = get_times()
 
-        mongo_string = 'mongodb://%s:%s@%s:27017/' % (username, password, ip)
-        client = pymongo.MongoClient(mongo_string)
+        #mongo_string = 'mongodb://%s:%s@%s:27017/' % (username, password, ip)
+        client = pymongo.MongoClient(ip+':27017',
+                                     username = username,
+                                     password = password,
+                                     authSource='finance')
         db = client.finance
         self.collection = db.options
 
@@ -90,7 +92,7 @@ class option_class(Process):
             result = self.collection.insert_many(json.loads(self.data_json), ordered=False)
 
         except BulkWriteError as bwe:
-
+            
             pass
 
 
