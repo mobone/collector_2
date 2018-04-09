@@ -3,11 +3,7 @@
 
 # collector.py: 10
 # finviz_getter.py: 8
-# speedycalls.py: 6
 CouchDB == 1.1
-
-# speedycalls.py: 8
-Pillow == 4.3.0
 
 # collector.py: 3
 # finviz_getter.py: 10
@@ -19,7 +15,6 @@ numpy == 1.13.3
 # collector.py: 1
 # data_transfer.py: 6
 # finviz_getter.py: 1
-# speedycalls.py: 2,12
 # yahoo_collector.py: 2
 pandas == 0.20.3
 
@@ -42,8 +37,6 @@ redis == 2.10.6
 # data_transfer.py: 1
 # finviz_getter.py: 2
 # redis_queue.py: 3
-# speedycalls.py: 1
-# test_couchdb.py: 2
 # yahoo_collector.py: 3
 requests == 2.18.4
 
@@ -54,6 +47,3 @@ requests_cache == 0.4.13
 # finviz_getter.py: 12
 # yahoo_collector.py: 11
 requests_toolbelt == 0.8.0
-
-# speedycalls.py: 7,10
-selenium == 3.8.0
