@@ -13,9 +13,15 @@ from requests_toolbelt.threaded import pool
 import re
 from nyse_holidays import *
 import pymongo
-#couch = couchdb.Server("http://mobone:C00kie32!@192.168.1.24:5984/")
-#db_data = couch['finviz_data']
-mongo_string = 'mongodb://192.168.1.24:27017/'
+import configparser
+import urllib
+
+config = configparser.ConfigParser()
+config.read('config.cfg')
+username = urllib.parse.quote_plus(config['creds']['User'])
+password = urllib.parse.quote_plus(config['creds']['Pass'])
+
+mongo_string = 'mongodb://%s:%s@%s:27017/' % (username, password, ip)
 client = pymongo.MongoClient(mongo_string)
 db = client.finance
 collection = db.finviz
@@ -68,7 +74,7 @@ def get_data(html_text, ticker):
                 if vol_month !='-':
                     ticker_table['Volatility_Month'] = float(vol_month.rstrip('%')) / 100.0
                 del ticker_table['Volatility']
-            
+
 
             elif '%' in ticker_table[col]:
                 ticker_table[col] = float(ticker_table[col].rstrip('%')) / 100.0

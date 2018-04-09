@@ -12,8 +12,14 @@ import argparse
 from redis_queue_class import RedisQueue
 import json
 from pymongo.errors import BulkWriteError
-#ip = '68.63.209.203'
-ip = '192.168.1.24'
+import configparser
+import urllib
+config = configparser.ConfigParser()
+config.read('config.cfg')
+username = urllib.parse.quote_plus(config['creds']['User'])
+password = urllib.parse.quote_plus(config['creds']['Pass'])
+
+ip = config['conn']['ip']
 
 def get_times():
     dt = datetime.now().strftime('%m-%d-%y')
@@ -35,10 +41,10 @@ class option_class(Process):
 
 
     def run(self):
-        self.q = RedisQueue('options', host='192.168.1.24')
+        self.q = RedisQueue('options', host=ip)
         self.times = get_times()
 
-        mongo_string = 'mongodb://%s:27017/' % ip
+        mongo_string = 'mongodb://%s:%s@%s:27017/' % (username, password, ip)
         client = pymongo.MongoClient(mongo_string)
         db = client.finance
         self.collection = db.options
@@ -52,7 +58,7 @@ class option_class(Process):
             #print(doc_id)
             #sleep(1)
             try:
-                response = requests.get('http://mobone:C00kie32!@192.168.1.24:5984/marketwatch_weekly/%s' % doc_id)
+                response = requests.get('http://mobone:C00kie32!@%s:5984/marketwatch_weekly/%s' % (ip, doc_id))
                 err = False
             except Exception as e:
                 print(e)

@@ -15,8 +15,15 @@ from nyse_holidays import *
 import json
 from pymongo.errors import BulkWriteError
 import warnings
+import configparser
+import urllib
 warnings.simplefilter(action='ignore', category=FutureWarning)
 finviz_url = 'https://finviz.com/screener.ashx?v=111&f=cap_smallover,sh_avgvol_o300,sh_opt_option&r=%s'
+
+config = configparser.ConfigParser()
+config.read('config.cfg')
+username = urllib.parse.quote_plus(config['creds']['User'])
+password = urllib.parse.quote_plus(config['creds']['Pass'])
 
 class option_getter(threading.Thread):
     def __init__(self, threadID, q, out_q, iteration):
@@ -75,7 +82,7 @@ class data_storer(Process):
 
     def run(self):
         #mongo_string = 'mongodb://68.63.209.203:27017/'
-        mongo_string = 'mongodb://192.168.1.24:27017/'
+        mongo_string = 'mongodb://%s:%s@%s:27017/' % (username, password, ip)
         client = pymongo.MongoClient(mongo_string)
         db = client.finance
         collection = db.options
@@ -155,7 +162,7 @@ def get_symbols():
     return symbols_list
 
 def start_threads():
-    
+
     for i in range(3):
         starter = thread_starter(symbols_q, out_q, start_index+1)
         starter.start()

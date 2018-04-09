@@ -17,7 +17,7 @@ $RECYCLE.BIN/
 *.sqlite-journal
 # Windows shortcuts
 *.lnk
-
+*.cfg
 # =========================
 # Operating System Files
 # =========================
