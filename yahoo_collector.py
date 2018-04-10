@@ -25,23 +25,27 @@ config.read('config.cfg')
 username = config['creds']['User']
 password = config['creds']['Pass']
 ip = config['conn']['ip']
+
 class option_getter(threading.Thread):
-    def __init__(self, threadID, q, out_q, iteration):
+    def __init__(self, threadID, q, out_q):
         threading.Thread.__init__(self)
         self.threadID = threadID
         self.q = q
         self.out_q = out_q
-        self.iteration = iteration
         self.s = r.Session()
-
 
     def run(self):
         self.update_date = datetime.now().strftime('%Y%m%d')
-        while self.q.qsize():
-            symbol = self.q.get()
-            options = self.get_options(symbol)
-            if options is not None:
-                self.out_q.put(options)
+        while True:
+            (symbol, iteration) = self.q.get()
+            try:
+                self.iteration = iteration
+                options = self.get_options(symbol)
+                if options is not None:
+                    self.out_q.put(options)
+            except Exception as e:
+                print('thread error:', e)
+                continue
 
 
     def get_options(self, symbol):
@@ -89,21 +93,18 @@ class data_storer(Process):
                                      password = password,
                                      authSource='finance')
         db = client.finance
-        collection = db.options
-        #print('process started')
-        #while True:
-        while self.out_q.qsize()==0:
-            sleep(10)
+        #collection = db.options
+        collection = db.options_test
         while True:
-            if self.out_q.qsize()==0:
-                sleep(10)
-            data = self.out_q.get()
-            data = data.to_json(orient='records',date_format='iso')
-
+            try:
+                data = self.out_q.get()
+                data = data.to_json(orient='records',date_format='iso')
+            except Exception as e:
+                print(e)
+                continue
             try:
 
                 collection.insert_many(json.loads(data), ordered=False)
-
             except BulkWriteError as bwe:
                 #print(bwe.details)
                 #you can also take this component and do more analysis
@@ -114,18 +115,18 @@ class data_storer(Process):
         print('process exiting')
 
 class thread_starter(Process):
-    def __init__(self, q, out_q, iteration):
+    def __init__(self, q, out_q):
         Process.__init__(self)
         self.q = q
         self.out_q = out_q
-        self.iteration = iteration
 
     def run(self):
         for i in range(20):
-            x = option_getter(i, self.q, self.out_q, self.iteration)
+            x = option_getter(i, self.q, self.out_q)
             x.start()
-        while self.q.qsize():
+        while True:
             sleep(10)
+
 
 
 
@@ -168,7 +169,7 @@ def get_symbols():
 def start_threads():
 
     for i in range(3):
-        starter = thread_starter(symbols_q, out_q, start_index+1)
+        starter = thread_starter(symbols_q, out_q)
         starter.start()
 
 
@@ -189,18 +190,18 @@ if __name__ == '__main__':
     storer = data_storer(symbols_q, out_q)
     storer.start()
 
+    start_threads()
+
     for start_index in range(start_index, len(start_times)):
         print("Collector sleeping", datetime.now(), start_times[start_index], start_index+1)
         while datetime.now()<start_times[start_index]:
             sleep(1)
 
-
         start = time.time()
         for symbol in symbols_list:
-            symbols_q.put(symbol)
+            symbols_q.put((symbol, start_index+1))
 
-        start_threads()
-        #print('>>',symbols_q.qsize(), out_q.qsize(), time.time()-start)
-        while symbols_q.qsize():
-            sleep(15)
-            print(symbols_q.qsize(), out_q.qsize(), time.time()-start)
+        while not symbols_q.empty():
+            sleep(30)
+            #print(symbols_q.qsize(), out_q.qsize(), time.time()-start)
+            print(time.time()-start)
