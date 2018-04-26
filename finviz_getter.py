@@ -93,7 +93,7 @@ def get_data(html_text, ticker):
         try:
             json_doc = eval(ticker_table.to_json(orient="index").replace('\\',''))
 
-            collection.insert_one(json_doc)
+            collection.replace_one({'_id': ticker_table['_id']}, json_doc, upsert=True)
             print(ticker)
         except Exception as e:
             print(e)

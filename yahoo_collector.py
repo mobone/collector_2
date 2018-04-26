@@ -94,10 +94,12 @@ class data_storer(Process):
                                      authSource='finance')
         db = client.finance
         #collection = db.options
-        collection = db.options_test
+        collection = db.options
         while True:
             try:
                 data = self.out_q.get()
+
+
                 data = data.to_json(orient='records',date_format='iso')
             except Exception as e:
                 print(e)
@@ -105,12 +107,9 @@ class data_storer(Process):
             try:
 
                 collection.insert_many(json.loads(data), ordered=False)
-            except BulkWriteError as bwe:
-                #print(bwe.details)
-                #you can also take this component and do more analysis
-                werrors = bwe.details['writeErrors']
-                #print('\n\n')
-                #print(werrors)
+            except Exception as e:
+                print(e)
+
 
         print('process exiting')
 
@@ -203,5 +202,5 @@ if __name__ == '__main__':
 
         while not symbols_q.empty():
             sleep(30)
-            #print(symbols_q.qsize(), out_q.qsize(), time.time()-start)
-            print(time.time()-start)
+            print(symbols_q.qsize(), out_q.qsize(), time.time()-start)
+            #print(time.time()-start)
