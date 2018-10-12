@@ -14,7 +14,7 @@ from nyse_holidays import *
 import pymongo
 import configparser
 import urllib
-
+from random import shuffle
 config = configparser.ConfigParser()
 config.read('config.cfg')
 username = config['creds']['User']
@@ -22,7 +22,7 @@ password = config['creds']['Pass']
 ip = config['conn']['ip']
 
 
-client = pymongo.MongoClient(ip+':65534',
+client = pymongo.MongoClient(ip+':27017',
                              username = username,
                              password = password,
                              authSource='finance')
@@ -170,6 +170,7 @@ if __name__ == '__main__':
     strong_up_symbols = get_symbols('https://finviz.com/screener.ashx?v=111&f=sh_price_u5,ta_pattern_channelup2&r=')
 
     urls=[]
+    shuffle(symbols)
     for ticker in symbols:
         urls.append('https://finviz.com/quote.ashx?t=' + ticker)
 
