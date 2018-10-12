@@ -5,10 +5,9 @@ import queue
 import threading
 import multiprocessing
 from time import sleep
-import couchdb
+import requests
 from datetime import datetime
 from bs4 import BeautifulSoup
-import holidays
 from requests_toolbelt.threaded import pool
 import re
 from nyse_holidays import *
@@ -22,13 +21,14 @@ username = config['creds']['User']
 password = config['creds']['Pass']
 ip = config['conn']['ip']
 
-mongo_string = 'mongodb://%s:%s@%s:27017/' % (username, password, ip)
-client = pymongo.MongoClient(ip+':27017',
+
+client = pymongo.MongoClient(ip+':65534',
                              username = username,
                              password = password,
                              authSource='finance')
 db = client.finance
-collection = db.finviz
+collection = db.penny_trading
+
 def get_data(html_text, ticker):
         start = html_text.find(b'"fullview-title"')
         end = html_text.find(b'</table>', start)
@@ -89,6 +89,19 @@ def get_data(html_text, ticker):
                 except:
                     pass
 
+        bid, ask = get_bid_ask(ticker)
+        ticker_table['Bid'] = bid
+        ticker_table['Ask'] = ask
+
+        if ticker in down_symbols:
+            ticker_table['Channel'] = 'Down'
+        elif ticker in strong_down_symbols:
+            ticker_table['Channel'] = 'Strong Down'
+        elif ticker in up_symbols:
+            ticker_table['Channel'] = 'Up'
+        elif ticker in strong_up_symbols:
+            ticker_table['Channel'] = 'Strong Up'
+
 
         try:
             json_doc = eval(ticker_table.to_json(orient="index").replace('\\',''))
@@ -98,35 +111,66 @@ def get_data(html_text, ticker):
         except Exception as e:
             print(e)
 
+def get_bid_ask(ticker):
+    bid, ask = None, None
+    try:
+        url = "https://finance.yahoo.com/q?s=%s" % ticker
+        soup = BeautifulSoup(requests.get(url).text)
+        bid = soup.find(attrs={"data-test":"BID-value"}).text.split(' x ')[0]
+        ask = soup.find(attrs={"data-test":"ASK-value"}).text.split(' x ')[0]
+    except Exception as e:
+        print('err with getting bid and ask')
+        print(e)
+
+    return (bid, ask)
+
 def p2f(x):
     return float(x.strip('%'))/100
 
-if __name__ == '__main__':
-    if datetime.now().strftime('%y%m%d') == NYSE_holidays()[0].strftime('%y%m%d'):
-        exit()
 
+def get_symbols(url):
     # get symbol count
-    html_text = r.get('https://finviz.com/screener.ashx?v=111&f=cap_smallover,sh_avgvol_o300,sh_opt_option').content
+    html_text = r.get(url).content
     total_count = int(re.findall(b'Total: </b>[0-9]*', html_text)[0].split(b'>')[1])
 
     urls = []
     for page_count in range(1, int(total_count), 20):
-        urls.append('https://finviz.com/screener.ashx?v=111&f=cap_smallover,sh_avgvol_o300,sh_opt_option&r=' + str(page_count))
-        print(page_count)
+        urls.append(url + str(page_count))
+
 
 
     p = pool.Pool.from_urls(urls, num_processes=20)
     p.join_all()
 
-    urls = []
     symbols_list = []
     for response in p.responses():
         symbols = re.findall(r'primary">[A-Z-]*', response.text)
         for symbol in symbols:
             symbols_list.append(symbol.split('>')[1])
+    print('Got ',len(symbols_list),' symbols')
+    return symbols_list
 
 
-    for ticker in symbols_list:
+if __name__ == '__main__':
+    if datetime.now().strftime('%y%m%d') == NYSE_holidays()[0].strftime('%y%m%d'):
+        exit()
+
+
+
+
+
+    symbols = get_symbols('https://finviz.com/screener.ashx?v=111&f=sh_avgvol_o50,sh_opt_short,sh_price_u5&r=')
+
+    down_symbols = get_symbols('https://finviz.com/screener.ashx?v=111&f=sh_price_u5,ta_pattern_channeldown&r=')
+
+    strong_down_symbols = get_symbols('https://finviz.com/screener.ashx?v=111&f=sh_price_u5,ta_pattern_channeldown2&r=')
+
+    up_symbols = get_symbols('https://finviz.com/screener.ashx?v=111&f=sh_price_u5,ta_pattern_channelup&r=')
+
+    strong_up_symbols = get_symbols('https://finviz.com/screener.ashx?v=111&f=sh_price_u5,ta_pattern_channelup2&r=')
+
+    urls=[]
+    for ticker in symbols:
         urls.append('https://finviz.com/quote.ashx?t=' + ticker)
 
 
