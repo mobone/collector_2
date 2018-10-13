@@ -16,7 +16,7 @@ import json
 from pymongo.errors import BulkWriteError
 import warnings
 import configparser
-import urllib
+
 warnings.simplefilter(action='ignore', category=FutureWarning)
 finviz_url = 'https://finviz.com/screener.ashx?v=111&f=cap_smallover,sh_avgvol_o300,sh_opt_option&r=%s'
 
@@ -46,11 +46,12 @@ class option_getter(threading.Thread):
             except Exception as e:
                 print('thread error:', e)
                 continue
+            if iteration==26 and self.q.empty():
+                break
 
 
     def get_options(self, symbol):
         forward_data = None
-
 
         try:
             o = Options(symbol, session=self.s)
@@ -85,9 +86,6 @@ class data_storer(Process):
         self.out_q = out_q
 
     def run(self):
-        #mongo_string = 'mongodb://68.63.209.203:27017/'
-        #mongo_string = 'mongodb://%s:%s@%s:27017/' % (username, password, ip)
-        #client = pymongo.MongoClient(mongo_string)
         client = pymongo.MongoClient(ip+':27017',
                                      username = username,
                                      password = password,
@@ -103,29 +101,26 @@ class data_storer(Process):
                 print(e)
                 continue
             try:
-
                 collection.insert_many(json.loads(data), ordered=False)
             except BulkWriteError as bwe:
-                #print(bwe.details)
-                #you can also take this component and do more analysis
-                werrors = bwe.details['writeErrors']
-                #print('\n\n')
-                #print(werrors)
+                pss
 
-        print('process exiting')
+        print('Storing process exiting')
 
-class thread_starter(Process):
+class thread_starter_process(Process):
     def __init__(self, q, out_q):
         Process.__init__(self)
         self.q = q
         self.out_q = out_q
 
     def run(self):
+        threads = []
         for i in range(20):
             x = option_getter(i, self.q, self.out_q)
             x.start()
-        while True:
-            sleep(10)
+            threads.append(x)
+
+        # TODO check threads still alive
 
 
 
@@ -166,15 +161,6 @@ def get_symbols():
         #    break
     return symbols_list
 
-def start_threads():
-
-    for i in range(3):
-        starter = thread_starter(symbols_q, out_q)
-        starter.start()
-
-
-
-
 
 
 if __name__ == '__main__':
@@ -190,7 +176,9 @@ if __name__ == '__main__':
     storer = data_storer(symbols_q, out_q)
     storer.start()
 
-    start_threads()
+    for i in range(3):
+        starter = thread_starter_process(symbols_q, out_q)
+        starter.start()
 
     for start_index in range(start_index, len(start_times)):
         print("Collector sleeping", datetime.now(), start_times[start_index], start_index+1)
@@ -205,3 +193,6 @@ if __name__ == '__main__':
             sleep(30)
             #print(symbols_q.qsize(), out_q.qsize(), time.time()-start)
             print(time.time()-start)
+            if datetime.now()>start_times[start_index]:
+                print("Queue did not empty")
+                break
