@@ -92,18 +92,20 @@ class data_storer(Process):
                                      authSource='finance')
         db = client.finance
         #collection = db.options
-        collection = db.options_test
         while True:
             try:
                 data = self.out_q.get()
+
+
                 data = data.to_json(orient='records',date_format='iso')
             except Exception as e:
                 print(e)
                 continue
             try:
                 collection.insert_many(json.loads(data), ordered=False)
+
             except BulkWriteError as bwe:
-                pss
+                pass
 
         print('Storing process exiting')
 
@@ -159,6 +161,7 @@ def get_symbols():
             symbols_list.append(symbol.split('>')[1])
         #if len(symbols_list)>1000:
         #    break
+    print(len(symbols_list))
     return symbols_list
 
 
@@ -183,16 +186,13 @@ if __name__ == '__main__':
     for start_index in range(start_index, len(start_times)):
         print("Collector sleeping", datetime.now(), start_times[start_index], start_index+1)
         while datetime.now()<start_times[start_index]:
-            sleep(1)
+            sleep(3)
 
         start = time.time()
         for symbol in symbols_list:
             symbols_q.put((symbol, start_index+1))
 
         while not symbols_q.empty():
-            sleep(30)
-            #print(symbols_q.qsize(), out_q.qsize(), time.time()-start)
-            print(time.time()-start)
-            if datetime.now()>start_times[start_index]:
-                print("Queue did not empty")
-                break
+
+            sleep(60)
+            print(symbols_q.qsize(), out_q.qsize(), time.time()-start)

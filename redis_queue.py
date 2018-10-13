@@ -16,13 +16,13 @@ def pull_from_couchdb(skip):
     #print(response.text)
     #print(response)
     print('getting', datetime.now(), q.qsize(), skip+skip_count, '',time.time()-start_time)
-
+    sleep(60)
 
     return response
 
 counts = []
 
-skip = 1500000
+skip = 39600000
 total = 46208448
 skip_count = 50000
 while True:
@@ -44,7 +44,7 @@ while True:
 
         last_size = q.qsize()
 
-    while q.qsize()>3000000:
+    while q.qsize()>4000000:
         time.sleep(30)
         counts.append(q.qsize()-last_size)
         if len(counts)>10:
