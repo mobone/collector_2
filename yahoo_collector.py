@@ -92,6 +92,7 @@ class data_storer(Process):
                                      authSource='finance')
         db = client.finance
         #collection = db.options
+        collection = db.options_2
         while True:
             try:
                 data = self.out_q.get()
