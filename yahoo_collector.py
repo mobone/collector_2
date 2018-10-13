@@ -94,7 +94,7 @@ class data_storer(Process):
                                      authSource='finance')
         db = client.finance
         #collection = db.options
-        collection = db.options
+        collection = db.options_2
         while True:
             try:
                 data = self.out_q.get()
@@ -163,6 +163,7 @@ def get_symbols():
             symbols_list.append(symbol.split('>')[1])
         #if len(symbols_list)>1000:
         #    break
+    print(len(symbols_list))
     return symbols_list
 
 def start_threads():
@@ -194,13 +195,13 @@ if __name__ == '__main__':
     for start_index in range(start_index, len(start_times)):
         print("Collector sleeping", datetime.now(), start_times[start_index], start_index+1)
         while datetime.now()<start_times[start_index]:
-            sleep(1)
+            sleep(3)
 
         start = time.time()
         for symbol in symbols_list:
             symbols_q.put((symbol, start_index+1))
 
         while not symbols_q.empty():
-            sleep(30)
+            sleep(60)
             print(symbols_q.qsize(), out_q.qsize(), time.time()-start)
             #print(time.time()-start)
